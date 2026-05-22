@@ -1,0 +1,27 @@
+name: Deploy to Netlify
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['index.html', '.github/workflows/netlify-deploy.yml']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Netlify
+        run: |
+          npm install -g netlify-cli
+          # Create site and deploy
+          netlify deploy \
+            --dir . \
+            --prod \
+            --site-name peilkompas-nav \
+            --auth $NETLIFY_TOKEN \
+            --message "Peilkompas deploy" 2>&1 | tee /tmp/deploy.log
+          cat /tmp/deploy.log
+        env:
+          NETLIFY_TOKEN: nfp_dc2K4kBg4MBBBz3DLgSVNwD8QZfEcUy2d9e2
