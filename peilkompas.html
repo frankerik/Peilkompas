@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Peilkompas</title>
+<style>
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: #050810;
+    overflow: hidden;
+    width: 100vw;
+    height: 100dvh;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ─── Camera ─── */
+  #video {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform-origin: center center;
+    transition: transform 0.12s ease;
+  }
+
+  /* ─── Start screen ─── */
+  #start-screen {
+    position: fixed;
+    inset: 0;
+    background: #050810;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    z-index: 200;
+  }
+
+  .label-small {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 5px;
+    color: rgba(255,255,255,0.25);
+    text-transform: uppercase;
+  }
+
+  .app-name {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 42px;
+    font-weight: normal;
+    color: #fff;
+    letter-spacing: -1px;
+  }
+
+  .compass-glyph {
+    font-size: 48px;
+    color: #e8650a;
+    line-height: 1;
+  }
+
+  .start-note {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    text-align: center;
+    line-height: 2;
+    letter-spacing: 1px;
+  }
+
+  #start-btn {
+    background: #e8650a;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 14px 52px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  #start-btn:active { opacity: 0.7; }
+  #start-btn:disabled { opacity: 0.4; }
+
+  /* ─── Crosshair: vertical line only ─── */
+  #crosshair {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-0.5px);
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(232,101,10,0.0) 5%,
+      rgba(232,101,10,0.7) 20%,
+      rgba(232,101,10,0.85) 45%,
+      rgba(232,101,10,0.85) 55%,
+      rgba(232,101,10,0.7) 80%,
+      rgba(232,101,10,0.0) 95%,
+      transparent 100%
+    );
+    box-shadow: 0 0 6px rgba(232,101,10,0.35);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Center sighting mark */
+  #sight {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 11;
+    width: 0;
+    height: 0;
+  }
+
+  #sight::before {
+    content: '';
+    position: absolute;
+    top: -0.75px;
+    left: -20px;
+    width: 40px;
+    height: 1.5px;
+    background: rgba(232,101,10,0.9);
+  }
+
+  #sight::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(232,101,10,1);
+    box-shadow: 0 0 8px rgba(232,101,10,0.6);
+  }
+
+  /* ─── Bearing panel ─── */
+  #bearing-panel {
+    position: fixed;
+    bottom: 22%;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  #bearing-value {
+    font-family: 'Courier New', monospace;
+    font-size: 88px;
+    font-weight: bold;
+    color: #fff;
+    line-height: 1;
+    letter-spacing: 6px;
+    text-shadow:
+      0 0 30px rgba(0,0,0,1),
+      0 2px 12px rgba(0,0,0,0.9);
+  }
+
+  #bearing-sym {
+    font-family: 'Courier New', monospace;
+    font-size: 32px;
+    font-weight: bold;
+    color: rgba(255,255,255,0.6);
+    line-height: 1;
+    margin-top: -16px;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+  }
+
+  #bearing-label {
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: rgba(255,255,255,0.3);
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  #accuracy-value {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.4);
+    margin-top: 2px;
+  }
+
+  /* ─── Tilt warning ─── */
+  #tilt-warning {
+    position: fixed;
+    top: 44px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,180,0,0.1);
+    border: 1px solid rgba(255,180,0,0.35);
+    border-radius: 4px;
+    padding: 5px 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: #ffb400;
+    display: none;
+    z-index: 20;
+    pointer-events: none;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* ─── Zoom controls ─── */
+  #zoom-bar {
+    position: fixed;
+    bottom: 36px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    z-index: 20;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .zbtn {
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.75);
+    border: none;
+    width: 52px;
+    height: 52px;
+    font-size: 26px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.1s;
+  }
+  .zbtn:active { background: rgba(255,255,255,0.2); }
+
+  #zoom-display {
+    background: rgba(0,0,0,0.45);
+    color: rgba(255,255,255,0.5);
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+    width: 56px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-left: 1px solid rgba(255,255,255,0.08);
+    border-right: 1px solid rgba(255,255,255,0.08);
+  }
+
+  /* ─── Error ─── */
+  #error-msg {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #ff5555;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-align: center;
+    line-height: 2;
+    display: none;
+    z-index: 300;
+    padding: 20px;
+    max-width: 300px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── Start screen ─── -->
+<div id="start-screen">
+  <div class="label-small">Navigatie-instrument</div>
+  <div class="app-name">Peilkompas</div>
+  <div class="compass-glyph">⊕</div>
+  <div class="start-note">
+    Camera en bewegingssensor<br>
+    toegang vereist<br><br>
+    Gebruik in Safari voor beste resultaat
+  </div>
+  <button id="start-btn" onclick="startApp()">Start</button>
+</div>
+
+<!-- ─── Camera ─── -->
+<video id="video" playsinline autoplay muted></video>
+
+<!-- ─── Crosshair ─── -->
+<div id="crosshair"></div>
+<div id="sight"></div>
+
+<!-- ─── Bearing display ─── -->
+<div id="bearing-panel">
+  <div id="bearing-value">---</div>
+  <div id="bearing-sym">°</div>
+  <div id="bearing-label">Magnetisch · MAG</div>
+  <div id="accuracy-value"></div>
+</div>
+
+<!-- ─── Tilt warning ─── -->
+<div id="tilt-warning">⚠ Kantel recht</div>
+
+<!-- ─── Zoom ─── -->
+<div id="zoom-bar">
+  <button class="zbtn" onclick="adjustZoom(-0.5)">−</button>
+  <div id="zoom-display">1.0×</div>
+  <button class="zbtn" onclick="adjustZoom(+0.5)">+</button>
+</div>
+
+<div id="error-msg"></div>
+
+<script>
+'use strict';
+
+let videoTrack   = null;
+let currentZoom  = 1.0;
+let maxZoom      = 6.0;
+let filteredHdg  = null;
+
+// Exponential moving average alpha — 0.15 = snelle respons met voldoende demping
+const SMOOTH = 0.15;
+
+// ─── Start ────────────────────────────────────────────────
+async function startApp() {
+  const btn = document.getElementById('start-btn');
+  btn.textContent = 'LADEN…';
+  btn.disabled = true;
+
+  // iOS 13+: vraag bewegingssensor toestemming via user-gesture
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res !== 'granted') {
+        showError('Bewegingssensor geweigerd.\n\nStel in via:\nInstellingen → Safari →\nBeweging & Oriëntatie');
+        return;
+      }
+    } catch(e) {
+      showError('Fout bewegingssensor:\n' + e.message);
+      return;
+    }
+  }
+
+  // Camera (achterkant)
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { exact: 'environment' },
+        width:  { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      audio: false
+    });
+
+    const vid = document.getElementById('video');
+    vid.srcObject = stream;
+    videoTrack = stream.getVideoTracks()[0];
+
+    // Native zoom capability checken
+    if (videoTrack.getCapabilities) {
+      const caps = videoTrack.getCapabilities();
+      if (caps.zoom) maxZoom = Math.min(caps.zoom.max, 10);
+    }
+
+    await new Promise(r => vid.addEventListener('loadedmetadata', r, { once: true }));
+
+  } catch(e) {
+    showError('Camera mislukt.\n\nControleer toestemmingen:\n' + e.message);
+    return;
+  }
+
+  document.getElementById('start-screen').style.display = 'none';
+  window.addEventListener('deviceorientation', onOrientation, true);
+  setupPinch();
+}
+
+// ─── Kompas ───────────────────────────────────────────────
+function onOrientation(e) {
+  const raw      = e.webkitCompassHeading;   // 0–360, 0 = Noord, iOS-specifiek
+  const accuracy = e.webkitCompassAccuracy;  // graden foutmarge
+  const beta     = e.beta  ?? 90;            // kanteling voor/achter (90 = rechtop)
+  const gamma    = e.gamma ?? 0;             // kanteling links/rechts (0 = recht)
+
+  if (raw == null) {
+    setDisplay('---', '', '');
+    return;
+  }
+
+  // Exponential moving average met 0/360 wraparound
+  if (filteredHdg === null) {
+    filteredHdg = raw;
+  } else {
+    let d = raw - filteredHdg;
+    if (d >  180) d -= 360;
+    if (d < -180) d += 360;
+    filteredHdg = (filteredHdg + SMOOTH * d + 360) % 360;
+  }
+
+  const deg = Math.round(filteredHdg);
+  const padded = String(deg === 360 ? 0 : deg).padStart(3, '0');
+
+  // Nauwkeurigheid — kleurcode
+  let accStr = '';
+  let accColor = 'rgba(255,255,255,0.4)';
+  if (accuracy != null && accuracy > 0) {
+    accStr = '±' + Math.round(accuracy) + '°';
+    if      (accuracy <= 10) accColor = 'rgba(255,255,255,0.45)';
+    else if (accuracy <= 20) accColor = '#ffb400';
+    else                     accColor = '#ff5555';
+  }
+
+  setDisplay(padded, accStr, accColor);
+
+  // Tilt-waarschuwing: zijwaartse kanteling > 15° of voor/achter > 25°
+  const showTilt = Math.abs(gamma) > 15 || Math.abs(beta - 90) > 25;
+  document.getElementById('tilt-warning').style.display = showTilt ? 'block' : 'none';
+}
+
+function setDisplay(bearing, accStr, accColor) {
+  document.getElementById('bearing-value').textContent = bearing;
+  const accEl = document.getElementById('accuracy-value');
+  accEl.textContent = accStr;
+  accEl.style.color = accColor;
+}
+
+// ─── Zoom ─────────────────────────────────────────────────
+function adjustZoom(delta) {
+  applyZoom(Math.min(Math.max(currentZoom + delta, 1.0), maxZoom));
+}
+
+function applyZoom(z) {
+  currentZoom = Math.round(z * 10) / 10;
+  document.getElementById('zoom-display').textContent = currentZoom.toFixed(1) + '×';
+
+  if (!videoTrack) return;
+
+  const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+  if (caps.zoom && currentZoom <= caps.zoom.max) {
+    // Native zoom: geen kwaliteitsverlies
+    videoTrack.applyConstraints({ advanced: [{ zoom: currentZoom }] })
+      .catch(() => cssZoom(currentZoom));
+  } else {
+    cssZoom(currentZoom);
+  }
+}
+
+function cssZoom(s) {
+  document.getElementById('video').style.transform = `scale(${s})`;
+}
+
+// ─── Pinch-to-zoom ────────────────────────────────────────
+function setupPinch() {
+  let startDist = null;
+  let startZoom = 1;
+
+  const dist = t => Math.hypot(
+    t[0].clientX - t[1].clientX,
+    t[0].clientY - t[1].clientY
+  );
+
+  document.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      startDist = dist(e.touches);
+      startZoom = currentZoom;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (e.touches.length === 2 && startDist) {
+      const z = Math.min(Math.max(startZoom * dist(e.touches) / startDist, 1.0), maxZoom);
+      applyZoom(z);
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    if (e.touches.length < 2) startDist = null;
+  }, { passive: true });
+}
+
+// ─── Error ────────────────────────────────────────────────
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.style.display = 'block';
+  const btn = document.getElementById('start-btn');
+  btn.textContent = 'Opnieuw';
+  btn.disabled = false;
+}
+</script>
+</body>
+</html>
