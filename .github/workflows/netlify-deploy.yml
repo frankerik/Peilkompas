@@ -12,16 +12,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy to Netlify
-        run: |
-          npm install -g netlify-cli
-          # Create site and deploy
-          netlify deploy \
-            --dir . \
-            --prod \
-            --site-name peilkompas-nav \
-            --auth $NETLIFY_TOKEN \
-            --message "Peilkompas deploy" 2>&1 | tee /tmp/deploy.log
-          cat /tmp/deploy.log
+      - name: Install Netlify CLI
+        run: npm install -g netlify-cli
+
+      - name: Create site and deploy
         env:
-          NETLIFY_TOKEN: nfp_dc2K4kBg4MBBBz3DLgSVNwD8QZfEcUy2d9e2
+          NETLIFY_AUTH_TOKEN: nfp_dc2K4kBg4MBBBz3DLgSVNwD8QZfEcUy2d9e2
+        run: |
+          # Create a new site via API and capture the site ID + URL
+          SITE_JSON=$(curl -s -X POST \
+            -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.netlify.com/api/v1/sites")
+
+          echo "Create site response: $SITE_JSON"
+          SITE_ID=$(echo "$SITE_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))")
+          SITE_URL=$(echo "$SITE_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('ssl_url') or d.get('url',''))")
+
+          echo "Site ID: $SITE_ID"
+          echo "Site URL: $SITE_URL"
+
+          if [ -z "$SITE_ID" ]; then
+            echo "ERROR: Could not create site. Trying netlify CLI directly..."
+            netlify deploy --dir . --prod --auth "$NETLIFY_AUTH_TOKEN" 2>&1
+          else
+            # Deploy to the created site
+            netlify deploy --dir . --prod \
+              --site "$SITE_ID" \
+              --auth "$NETLIFY_AUTH_TOKEN" \
+              --message "Peilkompas" 2>&1
+
+            echo ""
+            echo "=============================="
+            echo "LIVE URL: $SITE_URL"
+            echo "=============================="
+          fi
